@@ -9,7 +9,7 @@ Two backends, one API:
 | **File IPC** | Windows Python | Yes — AutoCAD LT 2024+ (Windows) | Win32 PrintWindow |
 | **ezdxf** | Any platform | No (headless) | matplotlib render |
 
-The server exposes **8 consolidated tools** (`drawing`, `entity`, `layer`, `block`, `annotation`, `pid`, `view`, `system`) over the MCP stdio transport. An MCP client (Claude Desktop, Claude Code, etc.) connects and drives AutoCAD through natural-language requests.
+The server exposes **8 consolidated tools** (`drawing`, `entity`, `layer`, `block`, `annotation`, `pid`, `view`, `system`) over MCP stdio (default) or HTTP+SSE transport. An MCP client (Claude Desktop, Claude Code, etc.) connects and drives AutoCAD through natural-language requests.
 
 ## Prerequisites (File IPC backend)
 
@@ -78,6 +78,47 @@ If your MCP client runs in WSL (e.g. Claude Code), launch the server through `cm
   }
 }
 ```
+
+#### Running as an SSE server
+
+Start the server separately and leave it running:
+
+```sh
+uv run python -m autocad_mcp --transport sse
+```
+
+The SSE URL is **`http://127.0.0.1:8000/sse`**. FastMCP also provides the
+`/messages/` endpoint used by the MCP client to send requests. This is the
+HTTP+SSE transport, not Streamable HTTP.
+
+For clients supporting SSE configuration (for example, Claude Code):
+
+```json
+{
+  "mcpServers": {
+    "autocad-mcp": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8000/sse"
+    }
+  }
+}
+```
+
+Set `AUTOCAD_MCP_HOST` and `AUTOCAD_MCP_PORT` to change the listening address
+and port. For example, in PowerShell, to allow connections from other machines:
+
+```powershell
+$env:AUTOCAD_MCP_HOST = "0.0.0.0"
+$env:AUTOCAD_MCP_PORT = "8000"
+uv run python -m autocad_mcp --transport sse
+```
+
+Clients then use `http://<server-ip>:8000/sse`. The server has no built-in
+authentication; use a trusted network or an authenticated reverse proxy.
+All connections share the same backend and current drawing. For File IPC,
+run the server with Windows Python on the machine running AutoCAD LT.
+
+To use stdio, omit `--transport` or pass `--transport stdio`.
 
 ### 4. Verify
 
@@ -161,7 +202,7 @@ Screenshots use `PrintWindow` (Win32) for the File IPC backend — works even wh
 
 ```
 MCP Client (Claude)
-    │  stdio (JSON-RPC)
+    │  stdio or HTTP+SSE (JSON-RPC)
     ▼
 Python MCP Server (autocad_mcp)
     │
@@ -178,6 +219,8 @@ The File IPC backend sends keystrokes to AutoCAD's MDIClient window via `PostMes
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AUTOCAD_MCP_BACKEND` | `auto` | Backend selection: `auto`, `file_ipc`, `ezdxf` |
+| `AUTOCAD_MCP_HOST` | `127.0.0.1` | SSE listening address (`0.0.0.0` for all interfaces) |
+| `AUTOCAD_MCP_PORT` | `8000` | SSE listening port |
 | `AUTOCAD_MCP_IPC_DIR` | `C:/temp` | Directory for IPC command/result JSON files (must match on both Python and LISP sides) |
 | `AUTOCAD_MCP_IPC_TIMEOUT` | `10.0` | IPC command timeout in seconds (1-300) |
 | `AUTOCAD_MCP_ONLY_TEXT` | `false` | Disable screenshot capture (text feedback only) |

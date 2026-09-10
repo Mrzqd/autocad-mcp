@@ -5,6 +5,9 @@ Tools: drawing, entity, layer, block, annotation, pid, view, system
 
 from __future__ import annotations
 
+import argparse
+import os
+
 import structlog
 from mcp.server.fastmcp import FastMCP
 
@@ -22,7 +25,11 @@ ToolResult = str | list
 
 log = structlog.get_logger()
 
-mcp = FastMCP("autocad-mcp")
+mcp = FastMCP(
+    "autocad-mcp",
+    host=os.environ.get("AUTOCAD_MCP_HOST", "127.0.0.1"),
+    port=int(os.environ.get("AUTOCAD_MCP_PORT", "8000")),
+)
 
 
 # ==========================================================================
@@ -524,10 +531,19 @@ async def system(
 # ==========================================================================
 
 
-def main():
-    """Run the MCP server on stdio transport."""
+def main(argv: list[str] | None = None):
+    """Run the MCP server using stdio or HTTP+SSE."""
     import logging
     import sys
+
+    parser = argparse.ArgumentParser(description="AutoCAD MCP server")
+    parser.add_argument(
+        "--transport",
+        choices=("stdio", "sse"),
+        default="stdio",
+        help="MCP transport (default: stdio). SSE uses AUTOCAD_MCP_HOST/PORT.",
+    )
+    args = parser.parse_args(argv)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -546,5 +562,5 @@ def main():
         ],
     )
 
-    log.info("autocad_mcp_starting", version="3.1.0")
-    mcp.run(transport="stdio")
+    log.info("autocad_mcp_starting", version="3.1.0", transport=args.transport)
+    mcp.run(transport=args.transport)
